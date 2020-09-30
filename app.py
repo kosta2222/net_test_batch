@@ -36,7 +36,7 @@ ready = False
 def operations(op, x):
     global ready
     alpha_leaky_relu = 1.7159
-    alpha_sigmoid = 5
+    alpha_sigmoid = 2
     alpha_tan = 1.7159
     beta_tan = 2/3
     if op == RELU:
@@ -82,9 +82,10 @@ def operations(op, x):
 
         return random.random()
     elif op == TAN:
-        f = alpha_tan * math.tanh(beta_tan * x)
-        return f
+        y = alpha_tan * math.tanh(beta_tan * x)
+        return y
     elif op == TAN_DERIV:
+        y = alpha_tan * math.tanh(beta_tan * x)
         return beta_tan / alpha_tan * (alpha_tan * alpha_tan - y * y)
     elif op == INIT_W_CONST:
         return 0.567141530112327
@@ -239,17 +240,6 @@ def get_err(diff):
 
 #############################################
 
-class Logger:
-    def __init__(self):
-        pass
-
-    def debug(self, s):
-        pass
-
-    def info(self, s):
-        pass
-
-
 def plot_gr(_file: str, errors: list, epochs: list) -> None:
     fig: plt.Figure = None
     ax: plt.Axes = None
@@ -265,28 +255,32 @@ def plot_gr(_file: str, errors: list, epochs: list) -> None:
     plt.show()
 
 
-# train_inp = [[1, 1], [2, 0], [0, 2]]
-# train_out = [[1], [0], [0]]
 train_inp = [[1, 1], [0, 0], [0, 1], [1, 0]]
-train_out = [[0], [0], [1], [1]]
+train_out = [[1], [0], [0], [0]]
 
 
 def main():
-    epochs = 1000
+    epochs = 3000
     l_r = 0.1
+    batch_size = 3
+    samples_count = 0
 
     errors_y = []
     epochs_x = []
 
     # Создаем обьект параметров сети
     nn_params = Nn_params()
+
+    tmp_v = 0
+
     # Создаем слои
-    n = cr_lay(nn_params, 2, 3, SIGMOID, True, INIT_W_MY)
-    n = cr_lay(nn_params, 3, 1, SIGMOID, True, INIT_W_MY)
+    n = cr_lay(nn_params, 2, 1, SIGMOID, True, INIT_W_CONST)
+    # n = cr_lay(nn_params, 3, 1, SIGMOID, True, INIT_W_MY)
 
     for ep in range(epochs):  # Кол-во повторений для обучения
         gl_e = 0
         for single_array_ind in range(len(train_inp)):
+            samples_count += 1
             inputs = train_inp[single_array_ind]
             output = feed_forwarding(nn_params, inputs)
 
@@ -294,15 +288,28 @@ def main():
 
             gl_e += get_err(e)
 
-            calc_out_error(nn_params, train_out[single_array_ind])
+            # Ошибка для последнего слоя
+            layer = nn_params.net[nn_params.nl_count-1]
+            out = layer.out
+
+            # накапливаем ошибку на выходе
+            # out - 1 выход
+            for row in range(out):
+                if samples_count % batch_size != 0:
+                    # накапливаем ошибку на выходе
+                    tmp_v += (layer.hidden[row] - train_out[single_array_ind][row]) * operations(
+                        layer.act_func + 1, layer.hidden[row])
+                else:
+                    # применяем ошибку
+                    layer.errors[row] = tmp_v
+                    # 'сбрасываем' ошибку
+                    tmp_v = 0
 
             # Обновление весов
-            upd_matrix(nn_params, 1, nn_params.net[1].errors, get_hidden(
-                nn_params.net[0]), l_r)
+            upd_matrix(nn_params, 0, nn_params.net[0].errors, inputs,
+                       l_r)
 
-            calc_hid_error(nn_params, 0)
-
-            upd_matrix(nn_params, 0, nn_params.net[0].errors, inputs, l_r)
+            
 
         gl_e /= 2
         print("error", gl_e)
@@ -312,7 +319,7 @@ def main():
         errors_y.append(gl_e)
         epochs_x.append(ep)
 
-        if gl_e == 0.001:
+        if gl_e == 0.1:
             break
 
     plot_gr('gr.png', errors_y, epochs_x)
@@ -323,7 +330,7 @@ def main():
         output_2_layer = feed_forwarding(nn_params, inputs)
 
         equal_flag = 0
-        for row in range(nn_params.net[1].out):
+        for row in range(nn_params.net[0].out):
             elem_net = output_2_layer[row]
             elem_train_out = train_out[single_array_ind][row]
             if elem_net > 0.5:
@@ -344,40 +351,7 @@ def main():
 
         print("========")
 
-    loger = Logger()
-    to_file(nn_params, nn_params.net, loger, 'wei1.my')
-
-
-def test():
-    sents = {'сегодня': [0, 1], 'дата': [1, 0]}
-    print("Попросите ввести 'сегодня дата'(Должно быть 2 слова)")
-    cmd = input('->')
-    res = cmd.split(' ')
-    vecs = []
-    for elem in range(len(res)):
-        word = res[elem]
-        vec = sents.get(word)
-        if vec is None:
-            print("Cmd unricognized")
-            sys.exit(1)
-        vecs.append(vec)
-    if len(vecs) != 2:
-        print("Cmd unricognized")
-        sys.exit(1)
-    print(vecs)
-    net_vec = add_2_vecs_comps(vecs[0], vecs[1], 2)
-    print(net_vec)
-    
-    loger = Logger()
-    nn_params_new = Nn_params()
-    deserialization(nn_params_new, 'wei1.my', loger)
-    net_res = feed_forwarding(nn_params_new, net_vec)
-
-    if net_res[0] > 0.5:
-        print(datetime.now())
-    else:
-        print("Cmd unricognized")
+    # to_file(nn_params, nn_params.net, loger, 'wei1.my')
 
 
 main()
-# test()
