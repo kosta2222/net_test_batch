@@ -1,0 +1,259 @@
+В машинном обучении градиентный спуск — это метод оптимизации, используемый для вычисления параметров модели (коэффициентов и смещения) для таких алгоритмов, как линейная регрессия, логистическая регрессия, нейронные сети и т. Д. В этом методе мы многократно повторяем учебный набор и обновляем модель параметры в соответствии с градиентом погрешности по отношению к обучающему набору.
+
+
+В зависимости от количества обучающих примеров, рассмотренных при обновлении параметров модели, у нас есть 3 типа градиентных спусков:
+
+Пакетный градиентный спуск: параметры обновляются после вычисления градиента ошибки по всему обучающему набору
+Стохастический градиентный спуск: параметры обновляются после вычисления градиента ошибки по отношению к одному обучающему примеру
+Мини-пакетный градиентный спуск: параметры обновляются после вычисления градиента ошибки относительно подмножества обучающего набора
+
+Batch Gradient Descent	Stochastic Gradient Descent	Mini-Batch Gradient Descent
+Since entire training data is considered before taking a step in the direction of gradient, therefore it takes a lot of time for making a single update.	Since only a single training example is considered before taking a step in the direction of gradient, we are forced to loop over the training set and thus cannot exploit the speed associated with vectorizing the code.	Since a subset of training examples is considered, it can make quick updates in the model parameters and can also exploit the speed associated with vectorizing the code.
+It makes smooth updates in the model parameters	It makes very noisy updates in the parameters	Depending upon the batch size, the updates can be made less noisy – greater the batch size less noisy is the update
+Таким образом, мини-пакетный градиентный спуск делает компромисс между быстрой сходимостью и шумом, связанным с обновлением градиента, что делает его более гибким и надежным алгоритмом.
+
+Мини-пакетный градиентный спуск:
+
+Алгоритм-
+
+Let theta = model parameters and max_iters = number of epochs.
+
+for itr = 1, 2, 3, …, max_iters:
+      for mini_batch (X_mini, y_mini):
+
+Forward Pass on the batch X_mini:
+Make predictions on the mini-batch
+Compute error in predictions (J(theta)) with the current values of the parameters
+Backward Pass:
+Compute gradient(theta) = partial derivative of J(theta) w.r.t. theta
+Update parameters:
+theta = theta – learning_rate*gradient(theta)
+Ниже приведена реализация Python:
+
+Шаг № 1: Первый шаг — импортировать зависимости, генерировать данные для линейной регрессии и визуализировать сгенерированные данные. Мы создали 8000 примеров данных, каждый из которых имеет 2 атрибута / функции. Эти примеры данных дополнительно подразделяются на обучающий набор (X_train, y_train) и тестовый набор (X_test, y_test), имеющие 7200 и 800 примеров соответственно.
+
+
+# импорт зависимостей
+
+import numpy as np
+
+import matplotlib.pyplot as plt
+
+  
+# создание данных
+
+mean = np.array([5.0, 6.0])
+
+cov = np.array([[1.0, 0.95], [0.95, 1.2]])
+
+data = np.random.multivariate_normal(mean, cov, 8000)
+
+  
+# визуализация данных
+
+plt.scatter(data[:500, 0], data[:500, 1], marker = '.')
+
+plt.show()
+
+  
+# train-test-split
+
+data = np.hstack((np.ones((data.shape[0], 1)), data))
+
+  
+
+split_factor = 0.90
+
+split = int(split_factor * data.shape[0])
+
+  
+
+X_train = data[:split, :-1]
+
+y_train = data[:split, -1].reshape((-1, 1))
+
+X_test = data[split:, :-1]
+
+y_test = data[split:, -1].reshape((-1, 1))
+
+  
+
+print("Number of examples in training set = % d"%(X_train.shape[0]))
+
+print("Number of examples in testing set = % d"%(X_test.shape[0]))
+
+Выход:
+
+
+Количество примеров в тренировочном наборе = 7200
+Количество примеров в тестовом наборе = 800
+
+Шаг № 2: Далее мы пишем код для реализации линейной регрессии с использованием мини-пакетного градиентного спуска.
+gradientDescent() является основной функцией драйвера, а другие функции являются вспомогательными функциями, используемыми для прогнозирования — hypothesis() , вычисления градиентов — gradient() , вычисления ошибки — cost() и создания мини-пакетов — create_mini_batches() . Функция драйвера инициализирует параметры, вычисляет лучший набор параметров для модели и возвращает эти параметры вместе со списком, содержащим историю ошибок при обновлении параметров.
+
+
+# линейная регрессия с использованием «мини-пакетного» градиентного спуска
+# функция для вычисления гипотез / прогнозов
+
+def hypothesis(X, theta):
+
+    return np.dot(X, theta)
+
+  
+# функция для вычисления градиента ошибки с функцией тета
+
+def gradient(X, y, theta):
+
+    h = hypothesis(X, theta)
+
+    grad = np.dot(X.transpose(), (h - y))
+
+    return grad
+
+  
+# функция для вычисления ошибки для текущих значений тета
+
+def cost(X, y, theta):
+
+    h = hypothesis(X, theta)
+
+    J = np.dot((h - y).transpose(), (h - y))
+
+    J /= 2
+
+    return J[0]
+
+  
+# функция для создания списка, содержащего мини-пакеты
+
+def create_mini_batches(X, y, batch_size):
+
+    mini_batches = []
+
+    data = np.hstack((X, y))
+
+    np.random.shuffle(data)
+
+    n_minibatches = data.shape[0] // batch_size
+
+    i = 0
+
+  
+
+    for i in range(n_minibatches + 1):
+
+        mini_batch = data[i * batch_size:(i + 1)*batch_size, :]
+
+        X_mini = mini_batch[:, :-1]
+
+        Y_mini = mini_batch[:, -1].reshape((-1, 1))
+
+        mini_batches.append((X_mini, Y_mini))
+
+    if data.shape[0] % batch_size != 0:
+
+        mini_batch = data[i * batch_size:data.shape[0]]
+
+        X_mini = mini_batch[:, :-1]
+
+        Y_mini = mini_batch[:, -1].reshape((-1, 1))
+
+        mini_batches.append((X_mini, Y_mini))
+
+    return mini_batches
+
+  
+# функция для выполнения мини-градиентного спуска
+
+def gradientDescent(X, y, learning_rate = 0.001, batch_size = 32):
+
+    theta = np.zeros((X.shape[1], 1))
+
+    error_list = []
+
+    max_iters = 3
+
+    for itr in range(max_iters):
+
+        mini_batches = create_mini_batches(X, y, batch_size)
+
+        for mini_batch in mini_batches:
+
+            X_mini, y_mini = mini_batch
+
+            theta = theta - learning_rate * gradient(X_mini, y_mini, theta)
+
+            error_list.append(cost(X_mini, y_mini, theta))
+
+  
+
+    return theta, error_list
+
+Вызов функции gradientDescent() для вычисления параметров модели (тета) и визуализации изменения в функции ошибки.
+
+
+theta, error_list = gradientDescent(X_train, y_train)
+
+print("Bias = ", theta[0])
+
+print("Coefficients = ", theta[1:])
+
+  
+# визуализация градиентного спуска
+plt.plot(error_list)
+
+plt.xlabel("Number of iterations")
+
+plt.ylabel("Cost")
+
+plt.show()
+
+Выход:
+Смещение = [0,81830471]
+Коэффициенты = [[1.04586595]]
+
+
+Шаг № 3: Наконец, мы делаем прогнозы на тестовом наборе и вычисляем среднюю абсолютную ошибку в прогнозах.
+
+
+# прогнозирование выхода для X_test
+
+y_pred = hypothesis(X_test, theta)
+
+plt.scatter(X_test[:, 1], y_test[:, ], marker = '.')
+
+plt.plot(X_test[:, 1], y_pred, color = 'orange')
+
+plt.show()
+
+  
+# расчет ошибки в прогнозах
+
+error = np.sum(np.abs(y_test - y_pred) / y_test.shape[0])
+
+print("Mean absolute error = ", error)
+
+Выход:
+
+
+Средняя абсолютная ошибка = 0,4366644295854125
+
+Оранжевая линия представляет окончательную функцию гипотезы: theta [0] + theta [1] * X_test [:, 1] + theta [2] * X_test [:, 2] = 0
+
+Рекомендуемые посты:
+
+ML | Стохастический градиентный спуск (SGD)
+Алгоритм градиентного спуска и его варианты
+Градиентный спуск в линейной регрессии
+Методы оптимизации для градиентного спуска
+Python | Морфологические операции в обработке изображений (градиент) | Set-3
+Python | Построение диаграммы Excel с градиентными заливками с использованием модуля XlsxWriter
+ML | XGBoost (экстремальное повышение градиента)
+ML | Введение в Gradient Optimizer на основе импульса
+Важные различия между Python 2.x и Python 3.x с примерами
+Python | Объединить значения ключа Python в список
+Python | Конвертировать список в массив Python
+Чтение файловоподобных объектов Python из C | питон
+Python | Индекс ненулевых элементов в списке Python
+Python | Сортировать словари Python по ключу или значению
+Python | Добавить запись в скрипт Python  
