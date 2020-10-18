@@ -104,6 +104,7 @@ class Dense:
         self.act_func = RELU
         self.hidden = [0] * 10  # вектор после функции активации
         self.errors = [0] * 10  # вектор ошибок слоя
+        self.batch_acc_tmp_l = [0] * 10 
         self.with_bias = False
         for row in range(10):  # создаем матрицу весов
             # подготовка матрицы весов,внутренняя матрица
@@ -117,6 +118,7 @@ class Nn_params:
         net[l_ind] = Dense()
     sp_d = -1  # алокатор для слоев
     nl_count = 0  # количество слоев
+    cost_tmp_v = 0
 
     # разные параметры
     loss_func = MODIF_MSE
@@ -190,27 +192,30 @@ tmp_v = 0
 
 
 def calc_out_error(nn_params, targets, samples_count, batch_size):
-    global tmp_v     
     layer = nn_params.net[nn_params.nl_count-1]
     out = layer.out
     print("sample_count", samples_count)
 
     for row in range(out):
+        print("cost v", nn_params.cost_tmp_v)
         # накапливаем ошибку на выходе
-        tmp_v += (layer.hidden[row] - targets[row]) * operations(
+        layer.batch_acc_tmp_l[row] +=\
+         (layer.hidden[row] - targets[row]) * operations(
             layer.act_func + 1, layer.hidden[row])
         if samples_count % batch_size == 0:
             # применяем ошибку
-            layer.errors[row] = tmp_v
-            tmp_v = 0
+            print("apply")
+            layer.errors[row] = layer.batch_acc_tmp_l[row]
+            nn_params.cost_tmp_v = 0
 
 
-def calc_hid_error(nn_params, layer_ind: int):
+def calc_hid_error(nn_params, layer_ind, samples_count, batch_size):
     layer = nn_params.net[layer_ind]
     layer_next = nn_params.net[layer_ind + 1]
     for elem in range(layer.in_):
         summ = 0
         for row in range(layer.out):
+          if samples_count % batch_size == 0:  
             summ += layer_next.matrix[row][elem] * layer_next.errors[row]
         layer.errors[elem] = summ * operations(
             layer.act_func + 1, layer.hidden[elem])
@@ -265,7 +270,7 @@ def plot_gr(_file: str, errors: list, epochs: list) -> None:
 
 
 train_inp = ((1, 1), (0, 0), (0, 1), (1, 0))  # Логическое И
-train_out = ([1], [0], [0], [0])
+train_out = ([1, 0], [0, 0], [1, 0], [1, 0])
 
 # train_inp = ((1, 0, 0, 0, 1, 0, 0, 0),
 #              (0, 1, 0, 0, 1, 0, 0, 0),
@@ -281,8 +286,8 @@ train_out = ([1], [0], [0], [0])
 
 def main():
     epochs = 3000
-    l_r = 0.1
-    batch_size = 3
+    l_r = 0.01
+    batch_size = 1
     samples_count = 0
 
     errors_y = []
@@ -293,12 +298,14 @@ def main():
 
     # tmp_v = 0
     # Создаем слои
-    n = cr_lay(nn_params, 2, 1, TRESHOLD_FUNC, False, INIT_W_CONST)
+    n = cr_lay(nn_params, 2, 2, TRESHOLD_FUNC, True, INIT_W_CONST)
     # n = cr_lay(nn_params, 3, 1, SIGMOID, True, INIT_W_MY)
 
     for ep in range(epochs):  # Кол-во повторений для обучения
         gl_e = 0
         for single_array_ind in range(len(train_inp)):
+            samples_count += 1
+
             inputs = train_inp[single_array_ind]
             output = feed_forwarding(nn_params, inputs)
 
@@ -330,7 +337,7 @@ def main():
             upd_matrix(nn_params, 0, nn_params.net[0].errors, inputs,
                        l_r)
 
-            samples_count += 1
+            
 
         gl_e /= 2
         print("error", gl_e)
@@ -340,7 +347,7 @@ def main():
         errors_y.append(gl_e)
         epochs_x.append(ep)
 
-        if gl_e == 0:
+        if gl_e < 0.1:
             break
 
     plot_gr('gr.png', errors_y, epochs_x)
