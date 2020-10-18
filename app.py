@@ -104,7 +104,7 @@ class Dense:
         self.act_func = RELU
         self.hidden = [0] * 10  # вектор после функции активации
         self.errors = [0] * 10  # вектор ошибок слоя
-        self.batch_acc_tmp_l = [0] * 10 
+        self.batch_acc_tmp_l = [0] * 10
         self.with_bias = False
         for row in range(10):  # создаем матрицу весов
             # подготовка матрицы весов,внутренняя матрица
@@ -197,17 +197,23 @@ def calc_out_error(nn_params, targets, samples_count, batch_size):
     print("sample_count", samples_count)
 
     for row in range(out):
-        print("cost v", nn_params.cost_tmp_v)
         # накапливаем ошибку на выходе
-        layer.batch_acc_tmp_l[row] +=\
-         (layer.hidden[row] - targets[row]) * operations(
-            layer.act_func + 1, layer.hidden[row])
-        if samples_count % batch_size == 0:
+        if samples_count % (batch_size + 1) != 0:
+            print("acc-te", end=' ')
+            print("layer.batch_acc_tmp_l[%d] = %f"%(row, layer.batch_acc_tmp_l[row]))
+            layer.batch_acc_tmp_l[row] +=\
+                (layer.hidden[row] - targets[row]) * operations(
+                layer.act_func + 1, layer.hidden[row])
+        else:
             # применяем ошибку
-            print("apply")
+            print("apply", end=' ')
+            print("layer.batch_acc_tmp_l[%d] = %f"%(row, layer.batch_acc_tmp_l[row]))
             layer.errors[row] = layer.batch_acc_tmp_l[row]
-            nn_params.cost_tmp_v = 0
+            print("errors[%d] = %f"%(row, layer.errors[row]))
+            samples_count = 0
 
+    samples_count+=1
+    return samples_count
 
 def calc_hid_error(nn_params, layer_ind, samples_count, batch_size):
     layer = nn_params.net[layer_ind]
@@ -215,8 +221,8 @@ def calc_hid_error(nn_params, layer_ind, samples_count, batch_size):
     for elem in range(layer.in_):
         summ = 0
         for row in range(layer.out):
-          if samples_count % batch_size == 0:  
-            summ += layer_next.matrix[row][elem] * layer_next.errors[row]
+            if samples_count % batch_size == 0:
+                summ += layer_next.matrix[row][elem] * layer_next.errors[row]
         layer.errors[elem] = summ * operations(
             layer.act_func + 1, layer.hidden[elem])
 
@@ -270,7 +276,7 @@ def plot_gr(_file: str, errors: list, epochs: list) -> None:
 
 
 train_inp = ((1, 1), (0, 0), (0, 1), (1, 0))  # Логическое И
-train_out = ([1, 0], [0, 0], [1, 0], [1, 0])
+train_out = ([1, 0], [0, 0], [1, 0], [0, 0])
 
 # train_inp = ((1, 0, 0, 0, 1, 0, 0, 0),
 #              (0, 1, 0, 0, 1, 0, 0, 0),
@@ -287,8 +293,8 @@ train_out = ([1, 0], [0, 0], [1, 0], [1, 0])
 def main():
     epochs = 3000
     l_r = 0.01
-    batch_size = 1
-    samples_count = 0
+    batch_size = 3
+    samples_count = 1
 
     errors_y = []
     epochs_x = []
@@ -304,10 +310,11 @@ def main():
     for ep in range(epochs):  # Кол-во повторений для обучения
         gl_e = 0
         for single_array_ind in range(len(train_inp)):
-            samples_count += 1
 
             inputs = train_inp[single_array_ind]
             output = feed_forwarding(nn_params, inputs)
+
+            # print("output", output)
 
             e = calc_diff(output, train_out[single_array_ind])
 
@@ -324,20 +331,20 @@ def main():
             #     tmp_v += (layer.hidden[row] - train_out[single_array_ind][row]) * operations(
             #         layer.act_func + 1, layer.hidden[row])
 
-                # if samples_count % 4 == 0:
-                #     # применяем ошибку
-                #     layer.errors[row] = tmp_v
-                #     print("tmp_v", tmp_v)
-                #     # 'сбрасываем' ошибку
-                #     tmp_v = 0
-            calc_out_error(
+            # if samples_count % 4 == 0:
+            #     # применяем ошибку
+            #     layer.errors[row] = tmp_v
+            #     print("tmp_v", tmp_v)
+            #     # 'сбрасываем' ошибку
+            #     tmp_v = 0
+            samples_count = calc_out_error(
                 nn_params, train_out[single_array_ind], samples_count, batch_size)
 
             # Обновление весов
             upd_matrix(nn_params, 0, nn_params.net[0].errors, inputs,
                        l_r)
 
-            
+            # samples_count += 1
 
         gl_e /= 2
         print("error", gl_e)
