@@ -9,6 +9,11 @@ from work_with_arr import add_2_vecs_comps
 from datetime import datetime
 import sys
 
+import clr  # Специальная библиотека С# + Python
+
+if clr.AddReference("Program"):  # ссылка на dll
+    from Brainy import *  # код из С#
+
 
 TRESHOLD_FUNC = 0
 TRESHOLD_FUNC_DERIV = 1
@@ -26,8 +31,11 @@ INIT_W_CONST = 12
 INIT_RANDN = 13
 SOFTMAX = 14
 SOFTMAX_DERIV = 15
-MODIF_MSE = 16
+PIECE_WISE_LINEAR = 16
+PIECE_WISE_LINEAR_DERIV = 17
+MODIF_MSE = 18
 
+"""
 ready = False
 
 # Различные операции по числовому коду
@@ -259,6 +267,8 @@ def get_err(diff):
 
 
 #############################################
+"""
+
 
 def plot_gr(_file: str, errors: list, epochs: list) -> None:
     fig: plt.Figure = None
@@ -276,7 +286,8 @@ def plot_gr(_file: str, errors: list, epochs: list) -> None:
 
 
 train_inp = ((1, 1), (0, 0), (0, 1), (1, 0))  # Логическое И
-train_out = ([1, 0], [0, 0], [1, 0], [0, 0])
+train_out = ([1], [0], [0], [0])
+
 
 # train_inp = ((1, 0, 0, 0, 1, 0, 0, 0),
 #              (0, 1, 0, 0, 1, 0, 0, 0),
@@ -291,8 +302,8 @@ train_out = ([1, 0], [0, 0], [1, 0], [0, 0])
 
 
 def main():
-    epochs = 3000
-    l_r = 0.01
+    epochs = 1000
+    l_r = 0.1
     batch_size = 3
     samples_count = 1
 
@@ -300,11 +311,10 @@ def main():
     epochs_x = []
 
     # Создаем обьект параметров сети
-    nn_params = Nn_params()
 
-    # tmp_v = 0
+    net = NetCon()
     # Создаем слои
-    n = cr_lay(nn_params, 2, 2, TRESHOLD_FUNC, True, INIT_W_CONST)
+    net.cr_lay(2, 1, SIGMOID , True, INIT_W_MY)
     # n = cr_lay(nn_params, 3, 1, SIGMOID, True, INIT_W_MY)
 
     for ep in range(epochs):  # Кол-во повторений для обучения
@@ -312,37 +322,20 @@ def main():
         for single_array_ind in range(len(train_inp)):
 
             inputs = train_inp[single_array_ind]
-            output = feed_forwarding(nn_params, inputs)
+            output = net.feed_forwarding(inputs)
 
             # print("output", output)
 
-            e = calc_diff(output, train_out[single_array_ind])
+            e = net.calc_diff(output, train_out[single_array_ind])
 
-            gl_e += get_err(e)
+            gl_e += net.get_err(e)
 
-            # Ошибка для последнего слоя
-            layer = nn_params.net[nn_params.nl_count-1]
-            out = layer.out
-
-            # накапливаем ошибку на выходе
-            # out - 1 выход
-            # for row in range(out):
-            #     # накапливаем ошибку на выходе
-            #     tmp_v += (layer.hidden[row] - train_out[single_array_ind][row]) * operations(
-            #         layer.act_func + 1, layer.hidden[row])
-
-            # if samples_count % 4 == 0:
-            #     # применяем ошибку
-            #     layer.errors[row] = tmp_v
-            #     print("tmp_v", tmp_v)
-            #     # 'сбрасываем' ошибку
-            #     tmp_v = 0
-            samples_count = calc_out_error(
-                nn_params, train_out[single_array_ind], samples_count, batch_size)
+            samples_count = net.calc_out_error(
+                train_out[single_array_ind], samples_count, batch_size)
 
             # Обновление весов
-            upd_matrix(nn_params, 0, nn_params.net[0].errors, inputs,
-                       l_r)
+            net.upd_matrix(0, net.net[0].errors, inputs,
+                           l_r)
 
             # samples_count += 1
 
@@ -354,7 +347,7 @@ def main():
         errors_y.append(gl_e)
         epochs_x.append(ep)
 
-        if gl_e < 0.1:
+        if gl_e < 0.3:
             break
 
     plot_gr('gr.png', errors_y, epochs_x)
@@ -362,10 +355,11 @@ def main():
     for single_array_ind in range(len(train_inp)):
         inputs = train_inp[single_array_ind]
 
-        output_2_layer = feed_forwarding(nn_params, inputs)
+        output_2_layer = net.feed_forwarding(inputs)
 
         equal_flag = 0
-        for row in range(nn_params.net[0].out):
+        out_net = net.net[0].out_
+        for row in range(out_net):
             elem_net = output_2_layer[row]
             elem_train_out = train_out[single_array_ind][row]
             if elem_net > 0.5:
