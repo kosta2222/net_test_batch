@@ -9,10 +9,10 @@ from work_with_arr import add_2_vecs_comps
 from datetime import datetime
 import sys
 
-import clr  # Специальная библиотека С# + Python
+# import clr  # Специальная библиотека С# + Python
 
-if clr.AddReference("Program"):  # ссылка на dll
-    from Brainy import *  # код из С#
+# if clr.AddReference("Program"):  # ссылка на dll
+#     from Brainy import *  # код из С#
 
 
 TRESHOLD_FUNC = 0
@@ -33,9 +33,11 @@ SOFTMAX = 14
 SOFTMAX_DERIV = 15
 PIECE_WISE_LINEAR = 16
 PIECE_WISE_LINEAR_DERIV = 17
-MODIF_MSE = 18
+TRESHOLD_FUNC_HALF = 18
+TRESHOLD_FUNC_HALF_DERIV = 19
+MODIF_MSE = 20
 
-"""
+
 ready = False
 
 # Различные операции по числовому коду
@@ -58,10 +60,26 @@ def operations(op, x):
         else:
             return 1
     elif op == TRESHOLD_FUNC:
-        if (x > 0.5):
+        if (x > 0):
             return 1
         else:
             return 0
+    elif op == TRESHOLD_FUNC_HALF:
+        if x >= 1/2:
+            return 1
+        else:
+            return 0
+    elif op == TRESHOLD_FUNC_HALF_DERIV:
+        return 1
+    elif op == PIECE_WISE_LINEAR:
+        if x >= 1/2:
+            return 1
+        elif x < 1/2 and x > -1/2:
+            return x
+        elif x <= -1/2:
+            return 0
+    elif op == PIECE_WISE_LINEAR_DERIV:
+        return 1
     elif op == TRESHOLD_FUNC_DERIV:
         return 1
     elif op == LEAKY_RELU:
@@ -106,7 +124,7 @@ def operations(op, x):
 class Dense:
     def __init__(self):  # конструктор
         self.in_ = None  # количество входов слоя
-        self.out = None  # количество выходов слоя
+        self.out_ = None  # количество выходов слоя
         self.matrix = [0] * 10  # матрица весов
         self.cost_signals = [0] * 10  # вектор взвешенного состояния нейронов
         self.act_func = RELU
@@ -120,154 +138,146 @@ class Dense:
             self.matrix[row] = self.inner_m
 
 
-class Nn_params:
-    net = [None] * 2  # Двойной перпецетрон
-    for l_ind in range(2):
-        net[l_ind] = Dense()
-    sp_d = -1  # алокатор для слоев
-    nl_count = 0  # количество слоев
-    cost_tmp_v = 0
+# class Nn_params:
+#     net = [None] * 2  # Двойной перпецетрон
+#     for l_ind in range(2):
+#         net[l_ind] = Dense()
+#     sp_d = -1  # алокатор для слоев
+#     nl_count = 0  # количество слоев
 
-    # разные параметры
-    loss_func = MODIF_MSE
-    alpha_leaky_relu = 0.01
-    alpha_sigmoid = 0.42
-    alpha_tan = 1.7159
-    beta_tan = 2 / 3
+#     # разные параметры
+#     loss_func = MODIF_MSE
+#     alpha_leaky_relu = 0.01
+#     alpha_sigmoid = 0.42
+#     alpha_tan = 1.7159
+#     beta_tan = 2 / 3
 
 ################### Функции обучения ######################
 
 
-def make_hidden(nn_params, layer_ind, inputs: list):
-    layer = nn_params.net[layer_ind]
-    for row in range(layer.out):
-        tmp_v = 0
-        for elem in range(layer.in_):
-            if layer.with_bias:
-                if elem == 0:
-                    tmp_v += layer.matrix[row][elem] * 1
+class NetCon:
+    def __init__(self):
+        self.net = [None] * 2  # Двойной перпецетрон
+        for l_ind in range(2):
+            self.net[l_ind] = Dense()
+        self.sp_d = -1  # алокатор для слоев
+        self.nl_count = 0  # количество слоев
+
+    def make_hidden(self, layer_ind, inputs: list):
+        layer = self.net[layer_ind]
+        for row in range(layer.out_):
+            tmp_v = 0
+            for elem in range(layer.in_):
+                if layer.with_bias:
+                    if elem == 0:
+                        tmp_v += layer.matrix[row][elem] * 1
+                    else:
+                        tmp_v += layer.matrix[row][elem] * inputs[elem]
+
                 else:
                     tmp_v += layer.matrix[row][elem] * inputs[elem]
 
-            else:
-                tmp_v += layer.matrix[row][elem] * inputs[elem]
+            layer.cost_signals[row] = tmp_v
+            val = operations(layer.act_func, tmp_v)
+            layer.hidden[row] = val
 
-        layer.cost_signals[row] = tmp_v
-        val = operations(layer.act_func, tmp_v)
-        layer.hidden[row] = val
+    def get_hidden(self, objLay: Dense):
+        return objLay.hidden
 
+    def feed_forwarding(self, inputs):
+        self.make_hidden(0, inputs)
+        j = self.nl_count
+        for i in range(1, j):
+            inputs = self.get_hidden(self.net[i - 1])
+            self.make_hidden(i, inputs)
 
-def get_hidden(objLay: Dense):
-    return objLay.hidden
+        last_layer = self.net[j-1]
 
+        return self.get_hidden(last_layer)
 
-def feed_forwarding(nn_params: Nn_params, inputs):
-    make_hidden(nn_params, 0, inputs)
-    j = nn_params.nl_count
-    for i in range(1, j):
-        inputs = get_hidden(nn_params.net[i - 1])
-        make_hidden(nn_params, i, inputs)
+    def cr_lay(self,   in_=0, out_=0, act_func=None, with_bias=False, init_w=INIT_W_RANDOM):
+        self.sp_d += 1
+        layer = self.net[self.sp_d]
+        layer.in_ = in_
+        layer.out_ = out_
+        layer.act_func = act_func
 
-    last_layer = nn_params.net[j-1]
-
-    return get_hidden(last_layer)
-
-
-def cr_lay(nn_params: Nn_params, in_=0, out=0, act_func=None, with_bias=False, init_w=INIT_W_RANDOM):
-    nn_params.sp_d += 1
-    layer = nn_params.net[nn_params.sp_d]
-    layer.in_ = in_
-    layer.out = out
-    layer.act_func = act_func
-
-    if with_bias:
-        layer.with_bias = True
-    else:
-        layer.with_bias = False
-
-    if with_bias:
-        in_ += 1
-    for row in range(out):
-        for elem in range(in_):
-            layer.matrix[row][elem] = operations(
-                init_w, 0)
-
-    nn_params.nl_count += 1
-    return nn_params
-
-
-tmp_v = 0
-
-
-def calc_out_error(nn_params, targets, samples_count, batch_size):
-    layer = nn_params.net[nn_params.nl_count-1]
-    out = layer.out
-    print("sample_count", samples_count)
-
-    for row in range(out):
-        # накапливаем ошибку на выходе
-        if samples_count % (batch_size + 1) != 0:
-            print("acc-te", end=' ')
-            print("layer.batch_acc_tmp_l[%d] = %f"%(row, layer.batch_acc_tmp_l[row]))
-            layer.batch_acc_tmp_l[row] +=\
-                (layer.hidden[row] - targets[row]) * operations(
-                layer.act_func + 1, layer.hidden[row])
+        if with_bias:
+            layer.with_bias = True
         else:
-            # применяем ошибку
-            print("apply", end=' ')
-            print("layer.batch_acc_tmp_l[%d] = %f"%(row, layer.batch_acc_tmp_l[row]))
-            layer.errors[row] = layer.batch_acc_tmp_l[row]
-            print("errors[%d] = %f"%(row, layer.errors[row]))
-            samples_count = 0
+            layer.with_bias = False
 
-    samples_count+=1
-    return samples_count
+        if with_bias:
+            in_ += 1
+        for row in range(out_):
+            for elem in range(in_):
+                layer.matrix[row][elem] = operations(
+                    init_w, 0)
 
-def calc_hid_error(nn_params, layer_ind, samples_count, batch_size):
-    layer = nn_params.net[layer_ind]
-    layer_next = nn_params.net[layer_ind + 1]
-    for elem in range(layer.in_):
-        summ = 0
-        for row in range(layer.out):
-            if samples_count % batch_size == 0:
-                summ += layer_next.matrix[row][elem] * layer_next.errors[row]
-        layer.errors[elem] = summ * operations(
-            layer.act_func + 1, layer.hidden[elem])
+        self.nl_count += 1
 
+    def calc_out_error(self,  targets, samples_count, batch_size):
+        layer = self.net[self.nl_count-1]
+        out_ = layer.out_
+        print("sample_count", samples_count)
 
-def upd_matrix(nn_params, layer_ind, errors, inputs, lr):
-    layer = nn_params.net[layer_ind]
-    for row in range(layer.out):
-        error = errors[row]
+        for row in range(out_):
+            # накапливаем ошибку на выходе
+            if samples_count % (batch_size + 1) != 0:
+                layer.batch_acc_tmp_l[row] +=\
+                    (layer.hidden[row] - targets[row]) * operations(
+                    layer.act_func + 1, layer.hidden[row])
+                samples_count += 1
+            else:
+                # применяем ошибку
+                layer.errors[row] = layer.batch_acc_tmp_l[row]
+                # layer.batch_acc_tmp_l[row]=0
+                samples_count = 1
+
+        return samples_count
+
+    def calc_hid_error(self,  layer_ind, samples_count, batch_size):
+        layer = self.net[layer_ind]
+        layer_next = self.net[layer_ind + 1]
         for elem in range(layer.in_):
-            if layer.with_bias:
-                if elem == 0:
-                    layer.matrix[row][elem] -= lr * \
-                        error * 1
+            summ = 0
+            for row in range(layer.out_):
+                if samples_count % batch_size == 0:
+                    summ += layer_next.matrix[row][elem] * \
+                        layer_next.errors[row]
+            layer.errors[elem] = summ * operations(
+                layer.act_func + 1, layer.hidden[elem])
+
+    def upd_matrix(self, layer_ind, errors, inputs, lr):
+        layer = self.net[layer_ind]
+        for row in range(layer.out_):
+            error = errors[row]
+            for elem in range(layer.in_):
+                if layer.with_bias:
+                    if elem == 0:
+                        layer.matrix[row][elem] -= lr * \
+                            error * 1
+                    else:
+                        layer.matrix[row][elem] -= lr * \
+                            error * inputs[elem]
                 else:
                     layer.matrix[row][elem] -= lr * \
                         error * inputs[elem]
-            else:
-                layer.matrix[row][elem] -= lr * \
-                    error * inputs[elem]
 
+    def calc_diff(self, out_nn, teacher_answ):
+        diff = [0] * len(out_nn)
+        for row in range(len(teacher_answ)):
+            diff[row] = out_nn[row] - teacher_answ[row]
+        return diff
 
-def calc_diff(out_nn, teacher_answ):
-    diff = [0] * len(out_nn)
-    for row in range(len(teacher_answ)):
-        diff[row] = out_nn[row] - teacher_answ[row]
-    return diff
-
-
-def get_err(diff):
-    sum = 0
-    for row in range(len(diff)):
-        sum += diff[row] * diff[row]
-    return sum
+    def get_err(self, diff):
+        sum = 0
+        for row in range(len(diff)):
+            sum += diff[row] * diff[row]
+        return sum
 
 
 #############################################
-"""
 
 
 def plot_gr(_file: str, errors: list, epochs: list) -> None:
@@ -285,26 +295,26 @@ def plot_gr(_file: str, errors: list, epochs: list) -> None:
     plt.show()
 
 
-train_inp = ((1, 1), (0, 0), (0, 1), (1, 0))  # Логическое И
-train_out = ([1], [0], [0], [0])
+# train_inp = ((1, 1), (0, 0), (0, 1), (1, 0))  # Логическое И
+# train_out = ([1], [0], [0], [0])
 
 
-# train_inp = ((1, 0, 0, 0, 1, 0, 0, 0),
-#              (0, 1, 0, 0, 1, 0, 0, 0),
-#              (1, 0, 0, 0, 0, 0, 0, 1),
-#              (0, 1, 0, 0, 0, 0, 0, 1)
-#              )
+train_inp = ((1, 0, 0, 0, 1, 0, 0, 0),
+             (0, 1, 0, 0, 1, 0, 0, 0),
+             (1, 0, 0, 0, 0, 0, 0, 1),
+             (0, 1, 0, 0, 0, 0, 0, 1)
+             )
 
-# train_out = ((1, 0, 1, 0),
-#              (1, 0, 0, 0),
-#              (1, 0, 1, 1),
-#              (1, 0, 0, 1))
+train_out = ((1, 0, 1, 0),
+             (1, 0, 0, 0),
+             (1, 0, 1, 1),
+             (1, 0, 0, 1))
 
 
 def main():
-    epochs = 1000
-    l_r = 0.1
-    batch_size = 3
+    epochs = 500
+    l_r = 0.01
+    batch_size = 2
     samples_count = 1
 
     errors_y = []
@@ -314,8 +324,8 @@ def main():
 
     net = NetCon()
     # Создаем слои
-    net.cr_lay(2, 1, SIGMOID , True, INIT_W_MY)
-    # n = cr_lay(nn_params, 3, 1, SIGMOID, True, INIT_W_MY)
+    net.cr_lay(8, 4, TRESHOLD_FUNC_HALF, False, INIT_W_MY)
+    # n = cr_lay( 3, 1, SIGMOID, True, INIT_W_MY)
 
     for ep in range(epochs):  # Кол-во повторений для обучения
         gl_e = 0
