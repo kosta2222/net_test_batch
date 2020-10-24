@@ -28,7 +28,7 @@ INIT_W_RANDOM = 9
 LEAKY_RELU = 10
 LEAKY_RELU_DERIV = 11
 INIT_W_CONST = 12
-INIT_RANDN = 13
+INIT_W_RANDN = 13
 SOFTMAX = 14
 SOFTMAX_DERIV = 15
 PIECE_WISE_LINEAR = 16
@@ -47,6 +47,7 @@ class Dense:
         self.in_ = None  # количество входов слоя
         self.out_ = None  # количество выходов слоя
         self.matrix = [0] * 10  # матрица весов
+        self.biases = [0] * 10
         self.cost_signals = [0] * 10  # вектор взвешенного состояния нейронов
         self.act_func = RELU
         self.hidden = [0] * 10  # вектор после функции активации
@@ -77,7 +78,7 @@ class Dense:
 
 
 class NetCon:
-    def __init__(self, alpha_sigmoid = 1, alpha_tan = 1, beta_tan = 1):
+    def __init__(self, alpha_sigmoid=1, alpha_tan=1, beta_tan=1):
         self.net = [None] * 2  # Двойной перпецетрон
         self.alpha_sigmoid = alpha_sigmoid
         self.alpha_tan = alpha_tan
@@ -93,15 +94,9 @@ class NetCon:
         for row in range(layer.out_):
             tmp_v = 0
             for elem in range(layer.in_):
-                if layer.with_bias:
-                    if elem == 0:
-                        tmp_v += layer.matrix[row][elem] * 1
-                    else:
-                        tmp_v += layer.matrix[row][elem] * inputs[elem]
-
-                else:
-                    tmp_v += layer.matrix[row][elem] * inputs[elem]
-
+                tmp_v += layer.matrix[row][elem] * inputs[elem]
+            if layer.with_bias:
+                tmp_v += layer.biases[row]
             layer.cost_signals[row] = tmp_v
             val = self.operations(layer.act_func, tmp_v)
             layer.hidden[row] = val
@@ -132,22 +127,23 @@ class NetCon:
         else:
             layer.with_bias = False
 
-        if with_bias:
-            in_ += 1
+        # if with_bias:
+        #     in_ += 1
         for row in range(out_):
             for elem in range(in_):
                 layer.matrix[row][elem] = self.operations(
                     init_w, 0)
-
+            layer.biases[row] = self.operations(
+                init_w, 0)
         self.nl_count += 1
 
     # Различные операции по числовому коду
 
     def operations(self, op, x):
         alpha_leaky_relu = 1.7159
-        # alpha_sigmoid = 2
-        # alpha_tan = 1.7159
-        # beta_tan = 2/3
+        alpha_sigmoid = 2
+        alpha_tan = 1.7159
+        beta_tan = 2/3
         if op == RELU:
             if (x <= 0):
                 return 0
@@ -195,8 +191,8 @@ class NetCon:
             y = 1 / (1 + math.exp(-self.alpha_sigmoid * x))
             return y
         elif op == SIGMOID_DERIV:
-            y = 1 / (1 + math.exp(-self.alpha_sigmoid * x))
-            return self.alpha_sigmoid * y * (1 - y)
+            # y = 1 / (1 + math.exp(-self.alpha_sigmoid * x))
+            return self.alpha_sigmoid * x * (1 - x)
         elif op == INIT_W_MY:
             if self.ready:
                 self.ready = False
@@ -214,26 +210,19 @@ class NetCon:
             return beta_tan / alpha_tan * (alpha_tan * alpha_tan - y * y)
         elif op == INIT_W_CONST:
             return 0.567141530112327
-        elif op == INIT_RANDN:
+        elif op == INIT_W_RANDN:
             return np.random.randn()
         else:
             print("Op or function does not support ", op)
 
-    def calc_out_error(self,  targets, op_val):
+    def calc_out_error(self,  targets):
         layer = self.net[self.nl_count-1]
         out_ = layer.out_
-        op = NOOP
-        op = op_val
         for row in range(out_):
             # накапливаем ошибку на выходе
-            if op == ACC_GRAD:
-                layer.batch_acc_tmp_l[row] +=\
-                    (layer.hidden[row] - targets[row]) * self.operations(
-                    layer.act_func + 1, layer.hidden[row])
-            elif op == APPLY_GRAD:
-                # применяем ошибку
-                layer.errors[row] = layer.batch_acc_tmp_l[row]
-                # layer.batch_acc_tmp_l[row]=0
+            layer.errors[row] =\
+                (layer.hidden[row] - targets[row]) * self.operations(
+                layer.act_func + 1, layer.hidden[row])
 
         # return samples_count
 
@@ -254,16 +243,10 @@ class NetCon:
         for row in range(layer.out_):
             error = errors[row]
             for elem in range(layer.in_):
-                if layer.with_bias:
-                    if elem == 0:
-                        layer.matrix[row][elem] -= lr * \
-                            error * 1
-                    else:
-                        layer.matrix[row][elem] -= lr * \
-                            error * inputs[elem]
-                else:
-                    layer.matrix[row][elem] -= lr * \
-                        error * inputs[elem]
+                layer.matrix[row][elem] -= lr * \
+                    error * inputs[elem]
+            if layer.with_bias:
+                layer.biases[row]-=error * 1        
 
     def calc_diff(self, out_nn, teacher_answ):
         diff = [0] * len(out_nn)
@@ -312,8 +295,21 @@ train_out = ([1], [0], [0], [0])
 #              (1, 0, 0, 1))
 
 
+def train_min_batches(net_obj: NetCon, X_batch, Y_batch, l_r):
+    len_x_batch = len(X_batch)
+    len_y_batch = len(Y_batch)
+    for row in range(len_x_batch):
+        inputs_b = X_batch[row]
+        train_out_b = Y_batch[row]
+        output_nc = net_obj.feed_forwarding(inputs_b)
+        net_obj.calc_out_error(train_out_b, ACC_GRAD)
+
+    net_obj.calc_out_error(None, APPLY_GRAD)
+    net_obj.upd_matrix(0, net_obj.net[0].errors,)
+
+
 def main():
-    epochs = 500
+    epochs = 10000
     l_r = 0.1
     batch_size = 1
 
@@ -322,15 +318,17 @@ def main():
 
     # Создаем обьект параметров сети
 
-    net = NetCon()
+    net = NetCon(alpha_sigmoid=2)
     # Создаем слои
-    net.cr_lay(2, 1, TRESHOLD_FUNC_HALF, False, INIT_W_MY)
+    net.cr_lay(2, 1, SIGMOID, True, INIT_W_RANDN)
     # n = cr_lay( 3, 1, SIGMOID, True, INIT_W_MY)
 
     for ep in range(epochs):  # Кол-во повторений для обучения
         gl_e = 0
-        samples_count = 0
         for single_array_ind in range(len(train_inp)):
+            # cnt = single_array_ind + 1
+            # print("i", single_array_ind)
+            # print("cnt", cnt)
 
             inputs = train_inp[single_array_ind]
             output = net.feed_forwarding(inputs)
@@ -340,24 +338,22 @@ def main():
             e = net.calc_diff(output, train_out[single_array_ind])
 
             gl_e += net.get_err(e)
-            if samples_count % (batch_size + 1) != 0:
+            # if cnt % (batch_size+1) != 0:
 
-                net.calc_out_error(
-                    train_out[single_array_ind], ACC_GRAD)
-                samples_count+=1    
-            else:
+            # print("ACC")
+            net.calc_out_error(
+                train_out[single_array_ind])
+            # if (cnt % batch_size ) == 0:
 
-                net.calc_out_error(None, APPLY_GRAD)
-                # samples_count = 0
+            # print("APPLY")
+            # net.calc_out_error(None, APPLY_GRAD)
 
-                # Обновление весов
-                net.upd_matrix(0, net.net[0].errors, inputs,
+            # Обновление весов
+            net.upd_matrix(0, net.net[0].errors, inputs,
                            l_r)
 
-                net.calc_out_error(
-                    train_out[single_array_ind], ACC_GRAD)        
-
-            # samples_count += 1
+            # net.calc_out_error(
+            #     train_out[single_array_ind ], ACC_GRAD)
 
         gl_e /= 2
         print("error", gl_e)
@@ -367,8 +363,8 @@ def main():
         errors_y.append(gl_e)
         epochs_x.append(ep)
 
-        if gl_e < 0.3:
-            break
+        # if gl_e < 0.3:
+        #     break
 
     plot_gr('gr.png', errors_y, epochs_x)
 
